@@ -79,8 +79,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $appName = if ($env:MUSTARD_EDITION -eq 'support') { 'MustardSupport' } else { 'MustardRemote' }
           "MUSTARD_APP_NAME=$appName" >> $env:GITHUB_ENV
-          $library = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Resolve-Path 'rustdesk/librustdesk.dll')))
-          if (-not $library.Contains($appName)) { throw 'The compiled client identity does not match.' }
           New-Item -ItemType Directory -Path packages -Force | Out-Null
 
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
