@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../common.dart';
 
 bool get isMustardClient =>
-    appName == 'Mustard Support' || appName == 'Mustard Remote';
+    appName == 'MustardSupport' || appName == 'MustardRemote';
+
+String get mustardDisplayName =>
+    appName == 'MustardSupport' ? 'Mustard Support' : 'Mustard Remote';
 
 class MustardBranding extends StatelessWidget {
   const MustardBranding({super.key});
@@ -24,7 +27,7 @@ class MustardBranding extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              appName,
+              mustardDisplayName,
               style: const TextStyle(
                 color: Color(0xFF535B4D),
                 fontWeight: FontWeight.w600,

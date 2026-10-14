@@ -2,8 +2,8 @@ use hbb_common::config;
 
 pub fn load() -> bool {
     let (name, connection_type) = match option_env!("MUSTARD_EDITION") {
-        Some("support") => ("Mustard Support", "incoming"),
-        Some("remote") => ("Mustard Remote", ""),
+        Some("support") => ("MustardSupport", "incoming"),
+        Some("remote") => ("MustardRemote", ""),
         _ => return false,
     };
 

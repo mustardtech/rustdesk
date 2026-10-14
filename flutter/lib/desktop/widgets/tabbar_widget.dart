@@ -642,7 +642,7 @@ class _DesktopTabState extends State<DesktopTab>
                         Offstage(
                             offstage: !showTitle,
                             child: Text(
-                              isMustardClient ? appName : "RustDesk",
+                              isMustardClient ? mustardDisplayName : "RustDesk",
                               style: const TextStyle(fontSize: 13),
                             ).marginOnly(left: 2))
                       ]).marginOnly(

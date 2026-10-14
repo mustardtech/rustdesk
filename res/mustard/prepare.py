@@ -11,7 +11,7 @@ import sys
 
 ASSETS = Path(__file__).resolve().parent
 ROOT = ASSETS.parent.parent
-NAMES = {"support": "Mustard Support", "remote": "Mustard Remote"}
+NAMES = {"support": "MustardSupport", "remote": "MustardRemote"}
 
 
 def prepare_client(root, edition, platform="windows"):
@@ -78,7 +78,7 @@ def prepare_linux(root, edition):
     for filename in ["rustdesk.desktop", "rustdesk-link.desktop"]:
         desktop = root / "res" / filename
         text = re.sub(r"(?m)^Name=(?:RustDesk|Mustard Support|Mustard Remote)$",
-                      f"Name={NAMES[edition]}", desktop.read_text())
+                      f"Name=Mustard {edition.capitalize()}", desktop.read_text())
         desktop.write_text(text)
     runner = root / "flutter/linux/my_application.cc"
     text = runner.read_text().replace('set_title(header_bar, "rustdesk")',

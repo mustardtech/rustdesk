@@ -15,6 +15,10 @@ Two editions share the same code and artwork:
 * `support`: **Mustard Support**, using RustDesk's existing incoming-only mode.
 * `remote`: **Mustard Remote**, with normal incoming and outgoing capabilities.
 
+Internal app, bundle, service and installed executable names are `MustardSupport`
+and `MustardRemote`: the existing privileged installer scripts require names
+without spaces. The desktop UI displays the names above.
+
 No edition selected means the existing RustDesk configuration and UI path.
 Mustard editions use their own app name, configuration directory and service identity.
 They do not load the vendor-signed `custom.txt` profile. Existing RustDesk settings
@@ -53,8 +57,8 @@ these changes; the normal build still needs the project's existing generated bri
 
 Windows release packaging must use the edition's name for installer/product metadata
 and the installed executable. The existing MSI tool accepts
-`--app-name "Mustard Support" --conn-type incoming --manufacturer Mustard` or
-`--app-name "Mustard Remote" --manufacturer Mustard`. Internal build
+`--app-name MustardSupport --conn-type incoming --manufacturer Mustard` or
+`--app-name MustardRemote --manufacturer Mustard`. Internal build
 outputs may still be named `rustdesk`; the connection settings do not depend on
 the download filename. Signing, installer generation and publication remain the
 responsibility of the release pipeline.

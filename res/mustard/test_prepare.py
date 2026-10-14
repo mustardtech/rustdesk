@@ -39,7 +39,7 @@ class PrepareTests(unittest.TestCase):
                         self.assertEqual((checkout / "flutter/macos/Runner/AppIcon.icns").read_bytes(),
                                          (ROOT / "AppIcon.icns").read_bytes())
                     else:
-                        self.assertIn(f"Name={name}", (checkout / files[0]).read_text())
+                        self.assertIn(f"Name=Mustard {edition.capitalize()}", (checkout / files[0]).read_text())
                         self.assertEqual((checkout / "res/128x128@2x.png").read_bytes(),
                                          (ROOT / "linux-icon.png").read_bytes())
 

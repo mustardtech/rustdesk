@@ -25,7 +25,7 @@ on:
 
 env:
   MUSTARD_EDITION: "${{ inputs.mustard-edition }}"
-  MUSTARD_APP_NAME: "${{ inputs.mustard-edition == 'support' && 'Mustard Support' || inputs.mustard-edition == 'remote' && 'Mustard Remote' || 'RustDesk' }}"
+  MUSTARD_APP_NAME: "${{ inputs.mustard-edition == 'support' && 'MustardSupport' || inputs.mustard-edition == 'remote' && 'MustardRemote' || 'RustDesk' }}"
   RENDEZVOUS_SERVER: "${{ inputs.mustard-edition != '' && secrets.RENDEZVOUS_SERVER || '' }}"
   RS_PUB_KEY: "${{ inputs.mustard-edition != '' && secrets.RS_PUB_KEY || '' }}"
   MUSTARD_RELAY_SERVER: "${{ inputs.mustard-edition != '' && secrets.MUSTARD_RELAY_SERVER || '' }}"
