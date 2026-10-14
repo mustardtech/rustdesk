@@ -47,13 +47,12 @@ def main():
             "-gravity", "north", "-annotate", "+0+400", "mustard",
             "-font", "Zain-Regular.ttf", "-pointsize", "48",
             "-annotate", "+0+550", "Support session in progress",
-            "-fill", "#DDAC5B", "-draw", "roundrectangle 740,658 1180,720 31,31",
-            "-fill", "#181C16", "-pointsize", "34",
-            "-annotate", "+0+661", "Privacy screen is on",
             "-fill", "#F4EFD7", "-pointsize", "32",
-            "-annotate", "+0+775", "This display is hidden while your technician works.",
-            "-fill", "#DDAC5B", "-pointsize", "26",
-            "-annotate", "+0+963", "mustard.co.nz  |  help@mustard.co.nz",
+            "-annotate", "+0+660", "Please leave this computer on while we assist you.",
+            "-fill", "#DDAC5B", "-pointsize", "44",
+            "-annotate", "+0+805", "Need to reach us?  07 855 6424",
+            "-pointsize", "26",
+            "-annotate", "+0+925", "mustard.co.nz  |  help@mustard.co.nz",
             "-depth", "8", "privacy.png",
         )
 
