@@ -3,6 +3,10 @@ name: build RustDeskTempTopMostWindow
 on:
   workflow_call:
     inputs:
+        mustard-branding:
+            description: 'Embed the Mustard privacy screen'
+            type: boolean
+            default: false
         upload-artifact:
           type: boolean
           default: true
@@ -38,6 +42,12 @@ jobs:
     env:
       build_output_dir: RustDeskTempTopMostWindow/WindowInjection/${{ inputs.platform }}/${{ inputs.configuration }}
     steps:
+      - name: Checkout Mustard branding
+        if: ${{ inputs.mustard-branding }}
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
@@ -48,6 +58,12 @@ jobs:
       - name: Build the project
         run: |
           cd RustDeskTempTopMostWindow && git checkout ecd8d6a139eee76845ea66423fb739af450fda90
+          if ('${{ inputs.mustard-branding }}' -eq 'true') {
+            python -m unittest discover -s ../res/mustard -p 'test_*.py'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python ../res/mustard/prepare.py --privacy-source .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
           msbuild ${{ env.project_path }} -p:Configuration=${{ inputs.configuration }} -p:Platform=${{ inputs.platform }} /p:TargetVersion=${{ inputs.target_version }}
 
       - name: Archive build artifacts
