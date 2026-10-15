@@ -48,6 +48,14 @@ jobs:
           - {runner: windows-11-arm, arch: aarch64, platform: ARM64}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Check Atera script syntax
+        run: |
+          $parseErrors = $null
+          [Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'res/mustard/Install-MustardSupport.ps1'), [ref]$null, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
 
       - name: Check the source edition
         env:
