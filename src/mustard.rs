@@ -1,5 +1,9 @@
 use hbb_common::config;
 
+pub fn voice_calls_disabled() -> bool {
+    matches!(option_env!("MUSTARD_EDITION"), Some("support" | "remote"))
+}
+
 pub fn load() -> bool {
     let (name, connection_type) = match option_env!("MUSTARD_EDITION") {
         Some("support") => ("MustardSupport", "incoming"),

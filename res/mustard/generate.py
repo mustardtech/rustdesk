@@ -49,10 +49,8 @@ def main():
             "-annotate", "+0+550", "Support session in progress",
             "-fill", "#F4EFD7", "-pointsize", "32",
             "-annotate", "+0+660", "Please leave this computer on while we assist you.",
-            "-fill", "#DDAC5B", "-pointsize", "44",
-            "-annotate", "+0+805", "Need to reach us?  07 855 6424",
-            "-pointsize", "26",
-            "-annotate", "+0+925", "mustard.co.nz  |  help@mustard.co.nz",
+            "-fill", "#DDAC5B", "-pointsize", "26",
+            "-annotate", "+0+925", "mustard.co.nz  |  help@mustard.co.nz  |  07 855 6424",
             "-depth", "8", "privacy.png",
         )
 

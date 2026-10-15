@@ -15,6 +15,9 @@ Two editions share the same code and artwork:
 * `support`: **Mustard Support**, using RustDesk's existing incoming-only mode.
 * `remote`: **Mustard Remote**, with normal incoming and outgoing capabilities.
 
+Both Mustard editions hide voice-call controls and shortcuts and decline incoming
+voice-call requests. Text chat and remote computer audio remain available.
+
 Internal app, bundle, service and installed executable names are `MustardSupport`
 and `MustardRemote`: the existing privileged installer scripts require names
 without spaces. The desktop UI displays the names above.
