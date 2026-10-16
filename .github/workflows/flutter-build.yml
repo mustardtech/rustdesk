@@ -3,6 +3,9 @@ name: Build the flutter version of the RustDesk
 on:
   workflow_call:
     inputs:
+      mustard-edition:
+        type: string
+        default: ""
       upload-artifact:
         type: boolean
         default: true
@@ -21,6 +24,11 @@ on:
 # in this file!
 
 env:
+  MUSTARD_EDITION: "${{ inputs.mustard-edition }}"
+  MUSTARD_APP_NAME: "${{ inputs.mustard-edition == 'support' && 'MustardSupport' || inputs.mustard-edition == 'remote' && 'MustardRemote' || 'RustDesk' }}"
+  RENDEZVOUS_SERVER: "${{ inputs.mustard-edition != '' && secrets.RENDEZVOUS_SERVER || '' }}"
+  RS_PUB_KEY: "${{ inputs.mustard-edition != '' && secrets.RS_PUB_KEY || '' }}"
+  MUSTARD_RELAY_SERVER: "${{ inputs.mustard-edition != '' && secrets.MUSTARD_RELAY_SERVER || '' }}"
   SCITER_RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503, also 1.78 has ABI change which causes our sciter version not working, https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   RUST_VERSION: "1.75" # sciter failed on m1 with 1.78 because of https://blog.rust-lang.org/2024/03/30/i128-layout-update.html
   MAC_RUST_VERSION: "1.81" # 1.81 is requred for macos, because of https://github.com/yury/cidre requires 1.81
@@ -64,10 +72,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout source code
-        if: ${{ inputs.publish-update-metadata }}
+        if: inputs.publish-update-metadata || inputs.mustard-edition != ''
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+
+      - name: Validate Mustard build inputs and preparation
+        if: inputs.mustard-edition != ''
+        run: |
+          python3 -m unittest discover -s res/mustard -p 'test_*.py'
+          python3 res/mustard/prepare.py --edition "$MUSTARD_EDITION" --platform linux -- python3 -c "pass"
 
       - name: Install Python
         if: ${{ inputs.publish-update-metadata }}
@@ -95,6 +109,7 @@ jobs:
         run: python res/update/generate_update_metadata.py check-key
 
   generate-sbom:
+    if: inputs.mustard-edition == ''
     needs: [validate-update-metadata-keys]
     runs-on: ubuntu-latest
 
@@ -143,6 +158,7 @@ jobs:
               platform: ARM64,
             }
     with:
+      mustard-branding: ${{ inputs.mustard-edition != '' }}
       upload-artifact: ${{ inputs.upload-artifact }}
       target: ${{ matrix.job.target }}
       configuration: Release
@@ -189,6 +205,11 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+
+      - name: Prepare Mustard windows branding
+        if: inputs.mustard-edition != ''
+        shell: bash
+        run: python3 res/mustard/prepare.py --edition "$MUSTARD_EDITION" --platform windows --prepare-only
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -454,7 +475,13 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
-          python preprocess.py --arp -d ../../rustdesk
+          if ($env:MUSTARD_EDITION) {
+            Copy-Item "../../rustdesk/rustdesk.exe" "../../rustdesk/$env:MUSTARD_APP_NAME.exe"
+            $connType = if ($env:MUSTARD_EDITION -eq 'support') { 'incoming' } else { '' }
+            python preprocess.py --arp -d ../../rustdesk --app-name "$env:MUSTARD_APP_NAME" --manufacturer Mustard --conn-type "$connType"
+          } else {
+            python preprocess.py --arp -d ../../rustdesk
+          }
           nuget restore msi.sln
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
@@ -516,6 +543,16 @@ jobs:
         run: |
           BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput
 
+      - name: Upload Mustard Windows installers
+        if: inputs.mustard-edition != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ inputs.mustard-edition }}-windows-${{ matrix.job.arch }}
+          path: |
+            SignOutput/*.exe
+            SignOutput/*.msi
+          if-no-files-found: error
+
       - name: Upload signed Windows Flutter EXE
         if: env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -534,7 +571,7 @@ jobs:
 
       - name: Publish Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
-        if: env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true'
+        if: inputs.mustard-edition == '' && (env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true')
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
@@ -544,6 +581,7 @@ jobs:
 
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
+    if: inputs.mustard-edition == ''
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     needs: [validate-update-metadata-keys]
     runs-on: ${{ matrix.job.os }}
@@ -725,7 +763,7 @@ jobs:
             ./SignOutput/rustdesk-*.exe
 
   build-rustdesk-ios:
-    if: ${{ inputs.upload-artifact }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact)
     name: build rustdesk ios ipa
     runs-on: ${{ matrix.job.os }}
     needs: [generate-bridge]
@@ -883,6 +921,11 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+
+      - name: Prepare Mustard macos branding
+        if: inputs.mustard-edition != ''
+        shell: bash
+        run: python3 res/mustard/prepare.py --edition "$MUSTARD_EDITION" --platform macos --prepare-only
 
       - name: Import the codesign cert
         if: env.MACOS_P12_BASE64 != null
@@ -1049,7 +1092,7 @@ jobs:
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          create-dmg --icon "${{ env.MUSTARD_APP_NAME }}.app" 200 190 --hide-extension "${{ env.MUSTARD_APP_NAME }}.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg "./flutter/build/macos/Build/Products/Release/${{ env.MUSTARD_APP_NAME }}.app"
 
       - name: Upload unsigned macOS app
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -1072,17 +1115,17 @@ jobs:
           rm -rf *.dmg || true
           # the identity secret carries its own shell quoting, so expand it inline like the dmg codesign below
           bash ./.github/scripts/sign-macos-app.sh \
-            ./flutter/build/macos/Build/Products/Release/RustDesk.app \
+            "./flutter/build/macos/Build/Products/Release/${{ env.MUSTARD_APP_NAME }}.app" \
             ${{ secrets.MACOS_CODESIGN_IDENTITY }} \
             ./flutter/macos/Runner/Release.entitlements
           if [ "$PUBLISH_UPDATE_METADATA" = "true" ]; then
-            reported_version="$(./flutter/build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/RustDesk --version)"
+            reported_version="$("./flutter/build/macos/Build/Products/Release/${{ env.MUSTARD_APP_NAME }}.app/Contents/MacOS/${{ env.MUSTARD_APP_NAME }}" --version)"
             if [ "$reported_version" != "$VERSION" ]; then
               echo "::error::RustDesk reports version '$reported_version', expected '$VERSION'"
               exit 1
             fi
           fi
-          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          create-dmg --icon "${{ env.MUSTARD_APP_NAME }}.app" 200 190 --hide-extension "${{ env.MUSTARD_APP_NAME }}.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg "./flutter/build/macos/Build/Products/Release/${{ env.MUSTARD_APP_NAME }}.app"
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
           rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
@@ -1108,7 +1151,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish DMG package
-        if: env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true'
+        if: inputs.mustard-edition == '' && (env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true')
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
@@ -1119,7 +1162,7 @@ jobs:
   publish-signed-update-metadata:
     needs: [build-for-windows-flutter, build-for-windows-sciter, build-for-macOS]
     runs-on: ubuntu-22.04
-    if: ${{ inputs.upload-artifact && inputs.publish-update-metadata && github.repository == 'rustdesk/rustdesk' }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact && inputs.publish-update-metadata && github.repository == 'rustdesk/rustdesk')
     concurrency:
       group: signed-update-${{ inputs.upload-tag }}
       cancel-in-progress: false
@@ -1257,7 +1300,7 @@ jobs:
       - build-for-windows-flutter
       - build-for-windows-sciter
     runs-on: ubuntu-latest
-    if: ${{ inputs.upload-artifact }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact)
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1313,6 +1356,7 @@ jobs:
           files: rustdesk-${{ env.VERSION }}-unsigned.tar.gz
 
   build-rustdesk-android:
+    if: inputs.mustard-edition == ''
     needs: [generate-bridge]
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
@@ -1608,7 +1652,7 @@ jobs:
   build-rustdesk-android-universal:
     needs: [build-rustdesk-android]
     name: build rustdesk android universal apk
-    if: ${{ inputs.upload-artifact }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact)
     runs-on: ubuntu-24.04
     env:
       reltype: release
@@ -1839,6 +1883,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Prepare Mustard linux branding
+        if: inputs.mustard-edition != ''
+        shell: bash
+        run: python3 res/mustard/prepare.py --edition "$MUSTARD_EDITION" --platform linux --prepare-only
+
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
         with:
@@ -1926,6 +1975,11 @@ jobs:
           arch: ${{ matrix.job.arch }}
           distro: ${{ matrix.job.distro }}
           githubToken: ${{ github.token }}
+          env: |
+            MUSTARD_EDITION: "${{ env.MUSTARD_EDITION }}"
+            RENDEZVOUS_SERVER: "${{ env.RENDEZVOUS_SERVER }}"
+            RS_PUB_KEY: "${{ env.RS_PUB_KEY }}"
+            MUSTARD_RELAY_SERVER: "${{ env.MUSTARD_RELAY_SERVER }}"
           setup: |
             ls -l "${PWD}"
             ls -l /opt/artifacts/vcpkg/installed
@@ -2090,7 +2144,7 @@ jobs:
             done
 
       - name: Publish debian/rpm package
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: inputs.mustard-edition == '' && (env.UPLOAD_ARTIFACT == 'true')
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
@@ -2098,6 +2152,16 @@ jobs:
           files: |
             rustdesk-*.deb
             rustdesk-*.rpm
+
+      - name: Upload Mustard Linux packages
+        if: inputs.mustard-edition != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ inputs.mustard-edition }}-linux-${{ matrix.job.arch }}
+          path: |
+            rustdesk-*.deb
+            rustdesk-*.rpm
+          if-no-files-found: error
 
       - name: Upload deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -2126,7 +2190,7 @@ jobs:
             cd res && HBB=`pwd`/.. FLUTTER=1 makepkg -f
 
       - name: Publish archlinux package
-        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        if: inputs.mustard-edition == '' && (matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true')
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
@@ -2140,6 +2204,7 @@ jobs:
   # old for it. A separate job rather than a matrix entry of build-rustdesk-linux: appimage and
   # flatpak need that job, and a failure here must not skip them.
   build-rustdesk-linux-drm:
+    if: inputs.mustard-edition == ''
     needs: [generate-bridge]
     name: build rustdesk linux drm x86_64
     runs-on: ubuntu-22.04
@@ -2459,7 +2524,7 @@ jobs:
           path: ${{ env.DRM_DEB }}
 
   build-rustdesk-linux-sciter:
-    if: ${{ inputs.upload-artifact }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact)
     needs: [validate-update-metadata-keys]
     runs-on: ${{ matrix.job.on }}
     name: build-rustdesk-linux-sciter ${{ matrix.job.target }}
@@ -2718,6 +2783,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Prepare Mustard linux branding
+        if: inputs.mustard-edition != ''
+        shell: bash
+        run: python3 res/mustard/prepare.py --edition "$MUSTARD_EDITION" --platform linux --prepare-only
+
       - name: Download Binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -2746,7 +2816,7 @@ jobs:
           cmp AppDir/AppRun appimage-build/AppRun/v2.0.0/AppRun-Release-${{ matrix.job.arch }}
 
       - name: Publish appimage package
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: inputs.mustard-edition == '' && (env.UPLOAD_ARTIFACT == 'true')
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
@@ -2754,13 +2824,21 @@ jobs:
           files: |
             ./appimage/rustdesk-${{ env.VERSION }}-*.AppImage
 
+      - name: Upload Mustard AppImage
+        if: inputs.mustard-edition != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ inputs.mustard-edition }}-appimage-${{ matrix.job.arch }}
+          path: appimage/*.AppImage
+          if-no-files-found: error
+
   build-flatpak:
     name: Build flatpak ${{ matrix.job.target }}${{ matrix.job.suffix }}
     needs:
       - build-rustdesk-linux
       - build-rustdesk-linux-sciter
     runs-on: ${{ matrix.job.on }}
-    if: ${{ inputs.upload-artifact }}
+    if: inputs.mustard-edition == '' && (inputs.upload-artifact)
     strategy:
       fail-fast: false
       matrix:

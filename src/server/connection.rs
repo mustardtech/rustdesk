@@ -4080,7 +4080,10 @@ impl Connection {
                     }
                 }
                 Some(message::Union::VoiceCallRequest(request)) => {
-                    if request.is_connect {
+                    if request.is_connect && crate::mustard::voice_calls_disabled() {
+                        self.send(new_voice_call_response(request.req_timestamp, false))
+                            .await;
+                    } else if request.is_connect {
                         self.voice_call_request_timestamp = Some(
                             NonZeroI64::new(request.req_timestamp)
                                 .unwrap_or(NonZeroI64::new(get_time()).unwrap()),

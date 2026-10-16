@@ -579,7 +579,7 @@ class ServerModel with ChangeNotifier {
       if (!hideCm) windowOnTop(null);
     });
     // Only do the hidden task when on Desktop.
-    if (client.authorized && isDesktop) {
+    if (client.authorized && isDesktop && appName != 'MustardSupport') {
       cmHiddenTimer = Timer(const Duration(seconds: 3), () {
         if (!hideCm) windowManager.minimize();
         cmHiddenTimer = null;

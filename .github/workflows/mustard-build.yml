@@ -1,0 +1,24 @@
+name: Build Mustard desktop clients
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  push:
+    branches: [mustard/build-support, mustard/build-remote]
+  workflow_dispatch:
+    inputs:
+      edition:
+        type: choice
+        required: true
+        options: [support, remote]
+
+jobs:
+  build:
+    uses: ./.github/workflows/flutter-build.yml
+    secrets: inherit
+    with:
+      mustard-edition: ${{ inputs.edition || (endsWith(github.ref_name, 'support') && 'support' || 'remote') }}
+      upload-artifact: true
+      publish-update-metadata: false

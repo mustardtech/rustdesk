@@ -1,0 +1,133 @@
+name: Package Mustard Windows installers
+
+on:
+  push:
+    branches: [mustard/package-support, mustard/package-remote]
+  workflow_dispatch:
+    inputs:
+      edition:
+        type: choice
+        required: true
+        options: [support, remote]
+      source-run-id:
+        description: 'Successful Mustard desktop build run containing unsigned Windows bundles'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  MUSTARD_EDITION: ${{ inputs.edition || (endsWith(github.ref_name, 'support') && 'support' || 'remote') }}
+  SOURCE_RUN_ID: ${{ inputs.source-run-id || (endsWith(github.ref_name, 'support') && '38649416969' || '38649423375') }}
+
+jobs:
+  privacy:
+    strategy:
+      matrix:
+        include:
+          - {runner: windows-2022, platform: x64}
+          - {runner: windows-11-arm, platform: ARM64}
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      mustard-branding: true
+      target: ${{ matrix.runner }}
+      platform: ${{ matrix.platform }}
+      configuration: Release
+      target_version: Windows10
+
+  package:
+    needs: privacy
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2022, arch: x86_64, platform: x64}
+          - {runner: windows-11-arm, arch: aarch64, platform: ARM64}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Check Atera script syntax
+        run: |
+          $parseErrors = $null
+          [Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'res/mustard/Install-MustardSupport.ps1'), [ref]$null, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+
+      - name: Check the source edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN_ID" --jq '.head_branch'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($branch -ne "mustard/build-$env:MUSTARD_EDITION") {
+            throw 'The source build does not match the requested edition.'
+          }
+
+      - name: Download compiled client
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: rustdesk-unsigned-windows-${{ matrix.arch }}
+          path: rustdesk
+
+      - name: Replace support screen helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: topmostwindow-artifacts-${{ matrix.platform }}
+          path: rustdesk
+
+      - name: Prepare package branding
+        run: |
+          python res/mustard/prepare.py --edition $env:MUSTARD_EDITION --platform windows --prepare-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $appName = if ($env:MUSTARD_EDITION -eq 'support') { 'MustardSupport' } else { 'MustardRemote' }
+          "MUSTARD_APP_NAME=$appName" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path packages -Force | Out-Null
+
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: '1.94.1'
+
+      - name: Build portable installer
+        run: |
+          python -m pip install -r libs/portable/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python libs/portable/generate.py -f rustdesk -o libs/portable -e rustdesk/rustdesk.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item target/release/rustdesk-portable-packer.exe "packages/$env:MUSTARD_APP_NAME-${{ matrix.arch }}.exe"
+
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+
+      - name: Build MSI
+        working-directory: res/msi
+        run: |
+          Move-Item ../../rustdesk/rustdesk.exe "../../rustdesk/$env:MUSTARD_APP_NAME.exe"
+          if ($env:MUSTARD_EDITION -eq 'support') {
+            python preprocess.py -d ../../rustdesk --app-name $env:MUSTARD_APP_NAME --manufacturer Mustard --conn-type incoming
+          } else {
+            python preprocess.py -d ../../rustdesk --app-name $env:MUSTARD_APP_NAME --manufacturer Mustard
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          nuget restore msi.sln
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          msbuild msi.sln -p:Configuration=Release -p:Platform=${{ matrix.platform }} /p:TargetVersion=Windows10
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $msi = Get-ChildItem Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          if (-not $msi) { throw 'MSI output not found.' }
+          Copy-Item $msi.FullName "../../packages/$env:MUSTARD_APP_NAME-${{ matrix.arch }}.msi"
+          Copy-Item ../mustard/Install-MustardSupport.ps1 ../../packages/
+          Get-ChildItem ../../packages -File | Get-FileHash -Algorithm SHA256 | ForEach-Object {
+            "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))"
+          } | Set-Content ../../packages/SHA256SUMS
+
+      - name: Upload installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ env.MUSTARD_EDITION }}-windows-${{ matrix.arch }}
+          path: packages/
+          if-no-files-found: error

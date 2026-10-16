@@ -4185,6 +4185,9 @@ List<String> getPrinterNames() {
 }
 
 String _appName = '';
+bool get voiceCallsEnabled =>
+    appName != 'MustardSupport' && appName != 'MustardRemote';
+
 String get appName {
   if (_appName.isEmpty) {
     _appName = bind.mainGetAppNameSync();

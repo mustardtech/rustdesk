@@ -218,7 +218,7 @@ class ShortcutModel {
       includeResetCanvasShortcut: isMobile,
       includePinToolbarShortcut: desktopLayout,
       includeViewModeShortcut: true,
-      includeVoiceCallShortcut: !isWeb && !isIOS,
+      includeVoiceCallShortcut: !isWeb && !isIOS && voiceCallsEnabled,
       excludedActions: Set.unmodifiable({
         if (!isDesktop) ...[
           kShortcutActionSwitchDisplayAll,
@@ -461,7 +461,7 @@ void registerSessionShortcutActions(
   // toolbar's `_VoiceCallMenu` state-driven button. Web bridge throws
   // UnimplementedError on both sessionRequestVoiceCall and
   // sessionCloseVoiceCall; iOS has no audio capture implementation.
-  if (!isWeb && !isIOS) {
+  if (!isWeb && !isIOS && voiceCallsEnabled) {
     ffi.shortcutModel.register(kShortcutActionToggleVoiceCall, () {
       final status = ffi.chatModel.voiceCallStatus.value;
       if (status == VoiceCallStatus.connected ||
