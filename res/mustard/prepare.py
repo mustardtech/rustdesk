@@ -18,6 +18,7 @@ def prepare_client(root, edition, platform="windows"):
     assets = root / "flutter/assets"
     if not assets.is_dir():
         raise ValueError("The build checkout must contain flutter/assets")
+    prepare_theme(root)
     for source, destination in [
         ("logo_light.png", assets / "logo.png"),
         ("logo_light.png", assets / "logo_light.png"),
@@ -50,6 +51,24 @@ def prepare_client(root, edition, platform="windows"):
             f'VALUE "FileDescription", "{NAMES[edition]} Remote Desktop"',
         )
     resource.write_bytes(text.encode("utf-8"))
+
+
+def prepare_theme(root):
+    common = root / "flutter/lib/common.dart"
+    text = common.read_text()
+    for original, branded in [
+        ("0xFF0071FF", "0xFF896018"),
+        ("0x770071FF", "0x77896018"),
+        ("0xAA0071FF", "0xAA896018"),
+        ("0xFF00B6F0", "0xFFDDAC5B"),
+        ("0xFF2C8CFF", "0xFF896018"),
+        ("0xFFEFEFF2", "0xFFF4EFD7"),
+        ("0xFF212121", "0xFF181C16"),
+        ("0xFF18191E", "0xFF181C16"),
+        ("primary: Colors.blue, secondary: accent", "primary: accent, secondary: accent"),
+    ]:
+        text = text.replace(original, branded)
+    common.write_text(text)
 
 
 def prepare_macos(root, edition):

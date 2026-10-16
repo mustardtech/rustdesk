@@ -26,7 +26,7 @@ def main():
                 f"logo_{theme}.png",
             )
         convert(
-            "-size", "512x512", "xc:#F4EFD7", mark,
+            "-size", "512x512", "xc:none", mark,
             "-geometry", "360x192+0+0", "-gravity", "center", "-composite",
             "-depth", "8", "icon.png",
         )

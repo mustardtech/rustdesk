@@ -18,6 +18,11 @@ Two editions share the same code and artwork:
 Both Mustard editions hide voice-call controls and shortcuts and decline incoming
 voice-call requests. Text chat and remote computer audio remain available.
 
+Mustard Support keeps the customer's connection manager visible after authorization,
+including when the saved configuration allows hiding it. This window shows the
+technician, connection status, text chat and disconnect controls. Customers can
+still minimize it themselves.
+
 Internal app, bundle, service and installed executable names are `MustardSupport`
 and `MustardRemote`: the existing privileged installer scripts require names
 without spaces. The desktop UI displays the names above.
@@ -152,6 +157,11 @@ The mark, palette and Zain fonts come from the Mustard website repository.
 The fonts retain their SIL Open Font License in `OFL.txt`. The committed images
 allow build preparation with Python alone. To regenerate them, install ImageMagick
 and run `python res/mustard/generate.py`. `privacy.png` is also a standalone preview.
+
+App and tray icons have transparent backgrounds, as do the light and dark wordmarks.
+Build preparation also applies Mustard's gold, cream and olive palette to the
+shared Flutter theme in the build checkout. Buttons use a darker gold so white
+labels remain readable; warning and error colours retain their existing meaning.
 
 The desktop banner and title use existing app-name bridge calls; there are no
 new FFI functions. Android, iOS and Web are excluded from this desktop workflow.
