@@ -93,9 +93,30 @@ Keep the generated helper source with the release's corresponding source materia
 `mustard-windows-package.yml` can refresh Windows packages without rebuilding the
 client or codec dependencies. It takes a desktop build run ID, verifies its edition,
 downloads that run's compiled Windows bundles, rebuilds only the image helper and
-portable wrapper, and produces named MSI/EXE files plus `SHA256SUMS`. Its initial
-push-triggered package branches reference the two desktop runs from this change;
-for subsequent releases use the workflow's explicit `source-run-id` input.
+portable wrapper, and produces named MSI/EXE files plus `SHA256SUMS`. Push-triggered
+package branches use the workflow's default desktop build run IDs; for subsequent
+releases use the workflow's explicit `source-run-id` input. The source must be a
+successful Mustard desktop build with the requested edition's Windows artifact.
+
+Windows packaging requires a GitHub environment named `windows-signing`, with
+these environment variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`, and
+`AZURE_SIGNING_ENDPOINT`. These are identifiers and configuration, not credentials.
+The Entra application's federated credential must trust
+`repo:mustardtech/rustdesk:environment:windows-signing`, and its service principal
+needs the Artifact Signing Certificate Profile Signer role. Restrict the GitHub
+environment to `mustard/package-support` and `mustard/package-remote`; dispatch
+packaging from one of those branches. No Azure client secret or private key is
+stored in GitHub.
+
+The workflow signs the client EXE and DLLs after replacing the screen helper,
+before building either installer. Vendor driver subdirectories retain their
+existing signatures and catalog hashes. Both architectures use x64 Windows
+signing jobs because the Azure action does not support ARM runners; packaging
+still runs on each architecture's existing runner. A final signing job signs the
+portable EXE, MSI and deployment script, verifies signatures and timestamps, then
+generates `SHA256SUMS`. Only that job uploads the final installer artifact names;
+the intermediate installers are explicitly named `unsigned-installers`.
 
 The artwork applies to Windows privacy modes that use the topmost window helper.
 Virtual-display modes and macOS display blanking do not show this image. No privacy
