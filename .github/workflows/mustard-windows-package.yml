@@ -20,7 +20,7 @@ permissions:
 
 env:
   MUSTARD_EDITION: ${{ inputs.edition || (endsWith(github.ref_name, 'support') && 'support' || 'remote') }}
-  SOURCE_RUN_ID: ${{ inputs.source-run-id || (endsWith(github.ref_name, 'support') && '38649416969' || '38649423375') }}
+  SOURCE_RUN_ID: ${{ inputs.source-run-id || (endsWith(github.ref_name, 'support') && '38842925336' || '38842928477') }}
 
 jobs:
   privacy:
@@ -37,8 +37,92 @@ jobs:
       configuration: Release
       target_version: Windows10
 
-  package:
+  sign-client:
     needs: privacy
+    runs-on: windows-2022
+    environment: windows-signing
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, platform: x64}
+          - {arch: aarch64, platform: ARM64}
+    steps:
+      - name: Check the source edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $source = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($source.path -ne '.github/workflows/mustard-build.yml' -or $source.conclusion -ne 'success') {
+            throw 'The source must be a successful Mustard desktop build.'
+          }
+          $artifacts = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.expired == false) | .name'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ("mustard-$env:MUSTARD_EDITION-windows-${{ matrix.arch }}" -notin $artifacts) {
+            throw 'The source build does not match the requested edition.'
+          }
+
+      - name: Download compiled client
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: rustdesk-unsigned-windows-${{ matrix.arch }}
+          path: rustdesk
+
+      - name: Replace support screen helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: topmostwindow-artifacts-${{ matrix.platform }}
+          path: rustdesk
+
+      - name: Log in to Azure with GitHub OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign client executables and DLLs
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\rustdesk
+          files-folder-filter: exe,dll
+          # Driver subdirectories retain their vendor signatures and catalog hashes.
+          files-folder-recurse: false
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+
+      - name: Verify client signatures and timestamps
+        run: |
+          $files = Get-ChildItem rustdesk -File | Where-Object { $_.Extension -in '.exe', '.dll' }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
+              throw "Signature or timestamp verification failed for $($file.Name): $($signature.StatusMessage)"
+            }
+            Write-Output "$($file.Name): $($signature.SignerCertificate.Subject); timestamped by $($signature.TimeStamperCertificate.Subject)"
+          }
+
+      - name: Upload signed client
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ env.MUSTARD_EDITION }}-signed-windows-${{ matrix.arch }}
+          path: rustdesk/
+          if-no-files-found: error
+
+  package:
+    needs: sign-client
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -57,28 +141,10 @@ jobs:
           [Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'res/mustard/Install-MustardSupport.ps1'), [ref]$null, [ref]$parseErrors) | Out-Null
           if ($parseErrors) { throw ($parseErrors | Out-String) }
 
-      - name: Check the source edition
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $branch = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN_ID" --jq '.head_branch'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($branch -ne "mustard/build-$env:MUSTARD_EDITION") {
-            throw 'The source build does not match the requested edition.'
-          }
-
-      - name: Download compiled client
+      - name: Download signed client
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ env.SOURCE_RUN_ID }}
-          name: rustdesk-unsigned-windows-${{ matrix.arch }}
-          path: rustdesk
-
-      - name: Replace support screen helper
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: topmostwindow-artifacts-${{ matrix.platform }}
+          name: mustard-${{ env.MUSTARD_EDITION }}-signed-windows-${{ matrix.arch }}
           path: rustdesk
 
       - name: Prepare package branding
@@ -121,9 +187,69 @@ jobs:
           if (-not $msi) { throw 'MSI output not found.' }
           Copy-Item $msi.FullName "../../packages/$env:MUSTARD_APP_NAME-${{ matrix.arch }}.msi"
           Copy-Item ../mustard/Install-MustardSupport.ps1 ../../packages/
-          Get-ChildItem ../../packages -File | Get-FileHash -Algorithm SHA256 | ForEach-Object {
+
+      - name: Upload unsigned installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mustard-${{ env.MUSTARD_EDITION }}-unsigned-installers-${{ matrix.arch }}
+          path: packages/
+          if-no-files-found: error
+
+  sign-installers:
+    needs: package
+    runs-on: windows-2022
+    environment: windows-signing
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    steps:
+      - name: Download unsigned installers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mustard-${{ env.MUSTARD_EDITION }}-unsigned-installers-${{ matrix.arch }}
+          path: packages
+
+      - name: Log in to Azure with GitHub OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign installers and deployment script
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\packages
+          files-folder-filter: exe,msi,ps1
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+
+      - name: Verify installer signatures and timestamps
+        run: |
+          $files = Get-ChildItem packages -File | Where-Object { $_.Extension -in '.exe', '.msi', '.ps1' }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
+              throw "Signature or timestamp verification failed for $($file.Name): $($signature.StatusMessage)"
+            }
+            Write-Output "$($file.Name): $($signature.SignerCertificate.Subject); timestamped by $($signature.TimeStamperCertificate.Subject)"
+          }
+
+      - name: Generate signed package checksums
+        run: |
+          Get-ChildItem packages -File | Get-FileHash -Algorithm SHA256 | ForEach-Object {
             "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))"
-          } | Set-Content ../../packages/SHA256SUMS
+          } | Set-Content packages/SHA256SUMS
 
       - name: Upload installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
