@@ -111,8 +111,10 @@ these environment variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`, and
 `AZURE_SIGNING_ENDPOINT`. These are identifiers and configuration, not credentials.
 The Entra application's federated credential must trust
-`repo:mustardtech/rustdesk:environment:windows-signing`, and its service principal
-needs the Artifact Signing Certificate Profile Signer role. Restrict the GitHub
+`repo:mustardtech@196999347/rustdesk@1419883192:environment:windows-signing`, and its
+service principal needs the Artifact Signing Certificate Profile Signer role.
+Use the Entra portal's **Other issuer** scenario to enter that exact subject;
+this repository uses GitHub's immutable owner and repository IDs. Restrict the GitHub
 environment to `mustard/package-support` and `mustard/package-remote`; dispatch
 packaging from one of those branches. No Azure client secret or private key is
 stored in GitHub.
