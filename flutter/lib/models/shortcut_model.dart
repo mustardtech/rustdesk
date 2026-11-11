@@ -220,6 +220,7 @@ class ShortcutModel {
       includeViewModeShortcut: true,
       includeVoiceCallShortcut: !isWeb && !isIOS && voiceCallsEnabled,
       excludedActions: Set.unmodifiable({
+        if (!textChatEnabled) kShortcutActionToggleChat,
         if (!isDesktop) ...[
           kShortcutActionSwitchDisplayAll,
           kShortcutActionToggleEnableFileCopyPaste,
@@ -453,6 +454,7 @@ void registerSessionShortcutActions(
   // helper that returns a TToggleMenu list — so its handler is wired
   // here rather than picked up by helper auto-register.
   ffi.shortcutModel.register(kShortcutActionToggleChat, () {
+    if (!textChatEnabled) return;
     ffi.chatModel.changeCurrentKey(MessageKey(ffi.id, ChatModel.clientModeID));
     ffi.chatModel.toggleChatOverlay();
   });

@@ -846,7 +846,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     }
-    toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    if (textChatEnabled) {
+      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    }
     if (!isWeb && voiceCallsEnabled) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }

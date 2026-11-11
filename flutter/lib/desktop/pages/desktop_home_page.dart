@@ -25,6 +25,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 import '../widgets/button.dart';
 import '../widgets/mustard_branding.dart';
+import '../widgets/mustard_home.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -90,10 +91,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         alignment: Alignment.center,
         child: loadLogo(),
       ),
-      if (isMustardClient) const MustardBranding(),
-      buildTip(context),
-      if (!isOutgoingOnly) buildIDBoard(context),
-      if (!isOutgoingOnly) buildPasswordBoard(context),
+      if (isMustardClient) buildMustardPanel(context),
+      if (!isMustardClient) buildTip(context),
+      if (!isOutgoingOnly && !isMustardClient) buildIDBoard(context),
+      if (!isOutgoingOnly && !isMustardClient) buildPasswordBoard(context),
       FutureBuilder<Widget>(
         future: Future.value(
             Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
@@ -131,7 +132,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 200.0,
+        width: isMustardClient
+            ? (isIncomingOnly
+                ? kMustardSupportPaneWidth
+                : kMustardRemotePaneWidth)
+            : (isIncomingOnly ? 280.0 : 200.0),
         color: Theme.of(context).colorScheme.background,
         child: Stack(
           children: [
@@ -175,6 +180,31 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 ),
               )
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildMustardPanel(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: Consumer<ServerModel>(
+        builder: (context, model, child) => MustardHomePanel(
+          support: bind.isIncomingOnly(),
+          id: model.serverId,
+          password: model.serverPasswd,
+          canRefreshPassword: model.approveMode != 'click' &&
+              model.verificationMethod != kUsePermanentPassword,
+          onCopyId: () {
+            Clipboard.setData(ClipboardData(text: model.serverId.text));
+            showToast(translate("Copied"));
+          },
+          onRefreshPassword: () => bind.mainUpdateTemporaryPassword(),
+          onChangePassword: bind.isDisableSettings()
+              ? null
+              : () => DesktopSettingPage.switch2page(SettingsTabKey.safety),
+          onSettings:
+              bind.isDisableSettings() ? null : DesktopTabPage.onAddSetting,
         ),
       ),
     );

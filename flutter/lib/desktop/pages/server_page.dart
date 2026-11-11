@@ -6,6 +6,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/mustard_branding.dart';
+import 'package:flutter_hbb/desktop/widgets/mustard_cm.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/cm_file_model.dart';
@@ -361,6 +363,9 @@ class ConnectionManagerState extends State<ConnectionManager>
 }
 
 Widget buildConnectionCard(Client client) {
+  if (isMustardClient) {
+    return MustardConnectionCard(key: ValueKey(client.id), client: client);
+  }
   return Consumer<ServerModel>(
     builder: (context, value, child) => Column(
       mainAxisAlignment: MainAxisAlignment.start,

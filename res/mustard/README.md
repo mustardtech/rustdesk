@@ -15,13 +15,14 @@ Two editions share the same code and artwork:
 * `support`: **Mustard Support**, using RustDesk's existing incoming-only mode.
 * `remote`: **Mustard Remote**, with normal incoming and outgoing capabilities.
 
-Both Mustard editions hide voice-call controls and shortcuts and decline incoming
-voice-call requests. Text chat and remote computer audio remain available.
+Both Mustard editions hide voice-call and text-chat controls and shortcuts, decline
+incoming voice-call requests and drop incoming chat messages. Remote computer audio
+remains available.
 
 Mustard Support keeps the customer's connection manager visible after authorization,
 including when the saved configuration allows hiding it. This window shows the
-technician, connection status, text chat and disconnect controls. Customers can
-still minimize it themselves.
+technician, what they can do, the session time and an End session button. Customers
+can still minimize it themselves.
 
 Internal app, bundle, service and installed executable names are `MustardSupport`
 and `MustardRemote`: the existing privileged installer scripts require names
@@ -182,9 +183,31 @@ allow build preparation with Python alone. To regenerate them, install ImageMagi
 and run `python res/mustard/generate.py`. `privacy.png` is also a standalone preview.
 
 App and tray icons have transparent backgrounds, as do the light and dark wordmarks.
-Build preparation also applies Mustard's gold, cream and olive palette to the
-shared Flutter theme in the build checkout. Buttons use a darker gold so white
-labels remain readable; warning and error colours retain their existing meaning.
+
+## Look
+
+Each edition has one look, fixed at build time; the Theme setting is locked.
+
+* **Mustard Support** is light: the website's cream, olive and gold. Buttons use a
+  darker gold so white labels remain readable.
+* **Mustard Remote** is dark: the palette of the Mustard tools, taken from
+  `mustardtech/gatehouse` (`src/Gatehouse.App/Theme/Theme.axaml`).
+
+Colours, corner radii, button sizes and the Inter UI font are defined once in
+`flutter/lib/desktop/widgets/mustard_theme.dart`. The home panel
+(`mustard_home.dart`) and the connection request, session and ended screens
+(`mustard_cm.dart`) replace the stock ones in Mustard builds only. Their wording is
+English only and is not in `src/lang`. The connection screens list what the
+technician can do; they do not offer the stock per-permission switches.
+
+Build preparation still edits three things in the build checkout, because they are
+compile-time values: the accent constants in `flutter/lib/common.dart`, the
+connection window size in `flutter/lib/consts.dart`, and the Inter font entry in
+`flutter/pubspec.yaml`. Inter retains its SIL Open Font License in `Inter-OFL.txt`.
+
+The About page keeps RustDesk's copyright and licence notice. Window titles in the
+taskbar still read `MustardSupport` / `MustardRemote`: the single-instance check
+finds the main window by that title.
 
 The desktop banner and title use existing app-name bridge calls; there are no
 new FFI functions. Android, iOS and Web are excluded from this desktop workflow.

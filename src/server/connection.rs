@@ -3903,6 +3903,8 @@ impl Connection {
                             self.toggle_privacy_mode(t).await;
                         }
                     }
+                    Some(misc::Union::ChatMessage(_))
+                        if crate::mustard::text_chat_disabled() => {}
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                         self.chat_unanswered = true;

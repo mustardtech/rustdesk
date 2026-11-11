@@ -27,7 +27,7 @@ class PrepareTests(unittest.TestCase):
                               "flutter/macos/Runner.xcodeproj/project.pbxproj"]
                              if platform == "macos" else
                              ["res/rustdesk.desktop", "res/rustdesk-link.desktop", "flutter/linux/my_application.cc"])
-                    files.append("flutter/lib/common.dart")
+                    files += ["flutter/lib/common.dart", "flutter/lib/consts.dart", "flutter/pubspec.yaml"]
                     for filename in files:
                         target = checkout / filename
                         target.parent.mkdir(parents=True, exist_ok=True)
@@ -57,7 +57,8 @@ class PrepareTests(unittest.TestCase):
                 )
                 common = checkout / "flutter/lib/common.dart"
                 common.parent.mkdir(parents=True)
-                common.write_bytes((ROOT.parent.parent / "flutter/lib/common.dart").read_bytes())
+                for filename in ["flutter/lib/common.dart", "flutter/lib/consts.dart", "flutter/pubspec.yaml"]:
+                    (checkout / filename).write_bytes((ROOT.parent.parent / filename).read_bytes())
                 result = subprocess.run(
                     [sys.executable, str(ROOT / "prepare.py"), "--edition", edition,
                      "--checkout", directory, "--platform", "windows", "--", sys.executable, "-c",
@@ -72,8 +73,15 @@ class PrepareTests(unittest.TestCase):
                                  (ROOT / "logo_light.png").read_bytes())
                 self.assertEqual((checkout / "res/icon.ico").read_bytes(),
                                  (ROOT / "icon.ico").read_bytes())
-                self.assertIn("accent = Color(0xFF896018)", common.read_text())
+                accent = {"support": "896018", "remote": "DDAC5B"}[edition]
+                self.assertIn(f"accent = Color(0xFF{accent})", common.read_text())
                 self.assertIn("idColor = Color(0xFFDDAC5B)", common.read_text())
+                self.assertIn("kConnectionManagerWindowSizeClosedChat = Size(360, 580)",
+                              (checkout / "flutter/lib/consts.dart").read_text())
+                self.assertIn("        - asset: assets/Inter-SemiBold.ttf\n          weight: 600\n",
+                              (checkout / "flutter/pubspec.yaml").read_text())
+                self.assertEqual((checkout / "flutter/assets/Inter-Regular.ttf").read_bytes(),
+                                 (ROOT / "Inter-Regular.ttf").read_bytes())
 
     def test_privacy_helper_receives_the_complete_branded_image(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -26,6 +26,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common/widgets/dialog.dart';
+import '../widgets/mustard_branding.dart';
+import '../widgets/mustard_theme.dart';
 import '../../common/widgets/login.dart';
 
 const double _kTabWidth = 200;
@@ -2594,7 +2596,8 @@ class _AboutState extends State<_About> {
               SelectionArea(
                   child: Text('${translate('ID')}: $myId')
                       .marginSymmetric(vertical: 4.0)),
-              InkWell(
+              if (!isMustardClient)
+                InkWell(
                   onTap: () {
                     launchUrlString('https://rustdesk.com/privacy.html');
                   },
@@ -2604,14 +2607,15 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com');
+                    launchUrlString(
+                        isMustardClient ? kMustardSite : 'https://rustdesk.com');
                   },
                   child: Text(
                     translate('Website'),
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: const BoxDecoration(color: MyTheme.button),
                 padding:
                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: SelectionArea(
@@ -2622,10 +2626,11 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
+                            '${isMustardClient ? '$mustardDisplayName is built on RustDesk.\n' : ''}Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
                             style: const TextStyle(color: Colors.white),
                           ),
-                          Text(
+                          if (!isMustardClient)
+                            Text(
                             translate('Slogan_tip'),
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
