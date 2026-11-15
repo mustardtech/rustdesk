@@ -129,6 +129,21 @@ or capture logic has changed. Incoming-only mode retains upstream's verified
 switch-sides exception; it is not a strict ban on all outgoing network traffic
 or an authorization policy for incoming technicians.
 
+## Customer download
+
+The website's **Remote support** button downloads
+`https://downloads.mustard.co.nz/MustardSupport-x86_64.exe`, a public R2 bucket
+(`mustard-downloads`). To replace it, run `mustard-windows-package.yml` manually with
+edition `support` and **publish** ticked. After signing, the `publish` job waits for
+approval in the `downloads-publish` environment, uploads the signed x64 portable
+runner under that same name, and checks the public URL serves the new file. Only
+that file is published; the MSI and ARM64 packages remain run artifacts.
+
+The environment holds `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (an R2 token
+limited to object read and write on that bucket) and the `R2_ACCOUNT_ID` variable.
+The website links the source for the published build, so keep that link's branch
+in step with what is published.
+
 ## Atera deployment
 
 Use the **MustardSupport** MSI for customer machines. Atera supports uploading an
