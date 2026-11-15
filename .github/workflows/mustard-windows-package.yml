@@ -13,6 +13,10 @@ on:
         description: 'Successful Mustard desktop build run containing unsigned Windows bundles'
         type: string
         required: true
+      publish:
+        description: 'Support edition only: replace the customer download on downloads.mustard.co.nz with this run''s signed x64 runner'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +25,8 @@ permissions:
 env:
   MUSTARD_EDITION: ${{ inputs.edition || (endsWith(github.ref_name, 'support') && 'support' || 'remote') }}
   SOURCE_RUN_ID: ${{ inputs.source-run-id || (endsWith(github.ref_name, 'support') && '38842925336' || '38842928477') }}
+  DOWNLOADS_BUCKET: mustard-downloads
+  DOWNLOADS_URL: https://downloads.mustard.co.nz
 
 jobs:
   privacy:
@@ -257,3 +263,54 @@ jobs:
           name: mustard-${{ env.MUSTARD_EDITION }}-windows-${{ matrix.arch }}
           path: packages/
           if-no-files-found: error
+
+  # The file customers get from the website's "Remote support" button. Manual runs only, and the
+  # downloads-publish environment asks a reviewer to approve before anything is replaced.
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && inputs.edition == 'support'
+    needs: sign-installers
+    runs-on: ubuntu-24.04
+    environment: downloads-publish
+    env:
+      RUNNER_FILE: MustardSupport-x86_64.exe
+    steps:
+      - name: Download signed installers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mustard-support-windows-x86_64
+          path: packages
+
+      - name: Check the runner against the signed checksums
+        working-directory: packages
+        # SHA256SUMS is written on Windows, with CRLF line endings.
+        run: tr -d '\r' < SHA256SUMS | grep -F "  $RUNNER_FILE" | sha256sum --check --strict
+
+      - name: Upload the runner to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 does not accept the checksum trailers newer AWS CLI versions send by default.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          # The file name never changes, so the cache lifetime is how soon customers see a new build.
+          aws s3 cp "packages/$RUNNER_FILE" "s3://$DOWNLOADS_BUCKET/$RUNNER_FILE" \
+            --endpoint-url "https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --content-type application/octet-stream \
+            --cache-control 'public, max-age=300'
+
+      - name: Check the public download
+        run: |
+          expected=$(tr -d '\r' < packages/SHA256SUMS | grep -F "  $RUNNER_FILE" | cut -d' ' -f1)
+          # Up to the cache lifetime, in case an edge is still serving the previous build.
+          for attempt in $(seq 1 12); do
+            actual=$(curl --fail --silent --show-error --location "$DOWNLOADS_URL/$RUNNER_FILE" | sha256sum | cut -d' ' -f1)
+            if [ "$actual" = "$expected" ]; then
+              echo "$DOWNLOADS_URL/$RUNNER_FILE is now $expected"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::$DOWNLOADS_URL/$RUNNER_FILE is $actual, expected $expected"
+          exit 1
