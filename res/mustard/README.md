@@ -15,13 +15,14 @@ Two editions share the same code and artwork:
 * `support`: **Mustard Support**, using RustDesk's existing incoming-only mode.
 * `remote`: **Mustard Remote**, with normal incoming and outgoing capabilities.
 
-Both Mustard editions hide voice-call controls and shortcuts and decline incoming
-voice-call requests. Text chat and remote computer audio remain available.
+Both Mustard editions hide voice-call and text-chat controls and shortcuts, decline
+incoming voice-call requests and drop incoming chat messages. Remote computer audio
+remains available.
 
 Mustard Support keeps the customer's connection manager visible after authorization,
 including when the saved configuration allows hiding it. This window shows the
-technician, connection status, text chat and disconnect controls. Customers can
-still minimize it themselves.
+technician, what they can do, the session time and an End session button. Customers
+can still minimize it themselves.
 
 Internal app, bundle, service and installed executable names are `MustardSupport`
 and `MustardRemote`: the existing privileged installer scripts require names
@@ -107,15 +108,60 @@ Keep the generated helper source with the release's corresponding source materia
 `mustard-windows-package.yml` can refresh Windows packages without rebuilding the
 client or codec dependencies. It takes a desktop build run ID, verifies its edition,
 downloads that run's compiled Windows bundles, rebuilds only the image helper and
-portable wrapper, and produces named MSI/EXE files plus `SHA256SUMS`. Its initial
-push-triggered package branches reference the two desktop runs from this change;
-for subsequent releases use the workflow's explicit `source-run-id` input.
+portable wrapper, and produces named MSI/EXE files plus `SHA256SUMS`. Push-triggered
+package branches use the workflow's default desktop build run IDs; for subsequent
+releases use the workflow's explicit `source-run-id` input. The source must be a
+successful Mustard desktop build with the requested edition's Windows artifact.
+
+Windows packaging requires a GitHub environment named `windows-signing`, with
+these environment variables: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_SIGNING_ACCOUNT`, `AZURE_SIGNING_PROFILE`, and
+`AZURE_SIGNING_ENDPOINT`. These are identifiers and configuration, not credentials.
+The Entra application's federated credential must trust
+`repo:mustardtech@196999347/rustdesk@1419883192:environment:windows-signing`, and its
+service principal needs the Artifact Signing Certificate Profile Signer role.
+Use the Entra portal's **Other issuer** scenario to enter that exact subject;
+this repository uses GitHub's immutable owner and repository IDs. Restrict the GitHub
+environment to `mustard/package-support` and `mustard/package-remote`; dispatch
+packaging from one of those branches. No Azure client secret or private key is
+stored in GitHub.
+
+The workflow signs the client EXE and DLLs after replacing the screen helper,
+before building either installer. Vendor driver subdirectories retain their
+existing signatures and catalog hashes. Both architectures use x64 Windows
+signing jobs because the Azure action does not support ARM runners; packaging
+still runs on each architecture's existing runner. A final signing job signs the
+portable EXE, MSI and deployment script, verifies signatures and timestamps, then
+generates `SHA256SUMS`. Only that job uploads the final installer artifact names;
+the intermediate installers are explicitly named `unsigned-installers`.
 
 The artwork applies to Windows privacy modes that use the topmost window helper.
 Virtual-display modes and macOS display blanking do not show this image. No privacy
 or capture logic has changed. Incoming-only mode retains upstream's verified
 switch-sides exception; it is not a strict ban on all outgoing network traffic
 or an authorization policy for incoming technicians.
+
+## Customer download
+
+The website's **Remote support** button downloads one release from
+`https://downloads.mustard.co.nz/releases/`, a public R2 bucket (`mustard-downloads`).
+To publish a release, run `mustard-windows-package.yml` manually with edition `support`
+and **publish** ticked. After signing, the `publish` job waits for approval in the
+`downloads-publish` environment, uploads the signed x64 portable runner as
+`releases/MustardSupport-<date>.<run number>-x86_64.exe`, and checks the public URL.
+Only that file is published; the MSI and ARM64 packages remain run artifacts.
+
+Release names are never reused. A bucket lock (`releases-immutable`, indefinite, on
+`releases/`) refuses overwrites and deletes, so a leaked token can add a file but
+cannot change one that customers download. Publishing does not change what customers
+get: the run summary prints the release URL and SHA-256, and the website switches to
+it through a reviewed change to `ui/web/src/lib/support-download.json` in
+`mustardtech/mustard.co.nz`. The site build checks the file against that SHA-256.
+
+The environment holds `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (an R2 token
+limited to object read and write on that bucket) and the `R2_ACCOUNT_ID` variable.
+The website links the source for the published build, so keep that link's branch
+in step with what is published.
 
 ## Atera deployment
 
@@ -165,9 +211,31 @@ allow build preparation with Python alone. To regenerate them, install ImageMagi
 and run `python res/mustard/generate.py`. `privacy.png` is also a standalone preview.
 
 App and tray icons have transparent backgrounds, as do the light and dark wordmarks.
-Build preparation also applies Mustard's gold, cream and olive palette to the
-shared Flutter theme in the build checkout. Buttons use a darker gold so white
-labels remain readable; warning and error colours retain their existing meaning.
+
+## Look
+
+Each edition has one look, fixed at build time; the Theme setting is locked.
+
+* **Mustard Support** is light: the website's cream, olive and gold. Buttons use a
+  darker gold so white labels remain readable.
+* **Mustard Remote** is dark: the palette of the Mustard tools, taken from
+  `mustardtech/gatehouse` (`src/Gatehouse.App/Theme/Theme.axaml`).
+
+Colours, corner radii, button sizes and the Inter UI font are defined once in
+`flutter/lib/desktop/widgets/mustard_theme.dart`. The home panel
+(`mustard_home.dart`) and the connection request, session and ended screens
+(`mustard_cm.dart`) replace the stock ones in Mustard builds only. Their wording is
+English only and is not in `src/lang`. The connection screens list what the
+technician can do; they do not offer the stock per-permission switches.
+
+Build preparation still edits three things in the build checkout, because they are
+compile-time values: the accent constants in `flutter/lib/common.dart`, the
+connection window size in `flutter/lib/consts.dart`, and the Inter font entry in
+`flutter/pubspec.yaml`. Inter retains its SIL Open Font License in `Inter-OFL.txt`.
+
+The About page keeps RustDesk's copyright and licence notice. Window titles in the
+taskbar still read `MustardSupport` / `MustardRemote`: the single-instance check
+finds the main window by that title.
 
 The desktop banner and title use existing app-name bridge calls; there are no
 new FFI functions. Android, iOS and Web are excluded from this desktop workflow.

@@ -4187,6 +4187,7 @@ List<String> getPrinterNames() {
 String _appName = '';
 bool get voiceCallsEnabled =>
     appName != 'MustardSupport' && appName != 'MustardRemote';
+bool get textChatEnabled => voiceCallsEnabled;
 
 String get appName {
   if (_appName.isEmpty) {

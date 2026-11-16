@@ -18,7 +18,7 @@ def prepare_client(root, edition, platform="windows"):
     assets = root / "flutter/assets"
     if not assets.is_dir():
         raise ValueError("The build checkout must contain flutter/assets")
-    prepare_theme(root)
+    prepare_theme(root, edition)
     for source, destination in [
         ("logo_light.png", assets / "logo.png"),
         ("logo_light.png", assets / "logo_light.png"),
@@ -53,13 +53,17 @@ def prepare_client(root, edition, platform="windows"):
     resource.write_bytes(text.encode("utf-8"))
 
 
-def prepare_theme(root):
+def prepare_theme(root, edition):
+    # Dart constants cannot follow the runtime theme in mustard_theme.dart, so the
+    # accent each edition's widgets read directly is set here: deep gold on the
+    # light Support theme, Gatehouse gold on the dark Remote theme.
+    accent = "896018" if edition == "support" else "DDAC5B"
     common = root / "flutter/lib/common.dart"
     text = common.read_text()
     for original, branded in [
-        ("0xFF0071FF", "0xFF896018"),
-        ("0x770071FF", "0x77896018"),
-        ("0xAA0071FF", "0xAA896018"),
+        ("0xFF0071FF", f"0xFF{accent}"),
+        ("0x770071FF", f"0x77{accent}"),
+        ("0xAA0071FF", f"0xAA{accent}"),
         ("0xFF00B6F0", "0xFFDDAC5B"),
         ("0xFF2C8CFF", "0xFF896018"),
         ("0xFFEFEFF2", "0xFFF4EFD7"),
@@ -69,6 +73,38 @@ def prepare_theme(root):
     ]:
         text = text.replace(original, branded)
     common.write_text(text)
+
+    # Room for the Mustard connection screens; the chat side panel keeps its width.
+    consts = root / "flutter/lib/consts.dart"
+    text = consts.read_text()
+    for original, branded in [
+        ("kConnectionManagerWindowSizeClosedChat = Size(300, 490)",
+         "kConnectionManagerWindowSizeClosedChat = Size(360, 580)"),
+        ("kConnectionManagerWindowSizeOpenChat = Size(700, 490)",
+         "kConnectionManagerWindowSizeOpenChat = Size(760, 580)"),
+    ]:
+        if original not in text and branded not in text:
+            raise ValueError(f"flutter/lib/consts.dart no longer contains: {original}")
+        text = text.replace(original, branded)
+    consts.write_text(text)
+
+    for font in ["Inter-Regular.ttf", "Inter-SemiBold.ttf"]:
+        shutil.copyfile(ASSETS / font, root / "flutter/assets" / font)
+    pubspec = root / "flutter/pubspec.yaml"
+    text = pubspec.read_text()
+    if "family: Inter" not in text:
+        if text.count("\n  fonts:\n") != 1:
+            raise ValueError("flutter/pubspec.yaml has no single top-level fonts list")
+        text = text.replace(
+            "\n  fonts:\n",
+            "\n  fonts:\n"
+            "    - family: Inter\n"
+            "      fonts:\n"
+            "        - asset: assets/Inter-Regular.ttf\n"
+            "        - asset: assets/Inter-SemiBold.ttf\n"
+            "          weight: 600\n",
+        )
+        pubspec.write_text(text)
 
 
 def prepare_macos(root, edition):
