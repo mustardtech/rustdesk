@@ -137,13 +137,20 @@ or an authorization policy for incoming technicians.
 
 ## Customer download
 
-The website's **Remote support** button downloads
-`https://downloads.mustard.co.nz/MustardSupport-x86_64.exe`, a public R2 bucket
-(`mustard-downloads`). To replace it, run `mustard-windows-package.yml` manually with
-edition `support` and **publish** ticked. After signing, the `publish` job waits for
-approval in the `downloads-publish` environment, uploads the signed x64 portable
-runner under that same name, and checks the public URL serves the new file. Only
-that file is published; the MSI and ARM64 packages remain run artifacts.
+The website's **Remote support** button downloads one release from
+`https://downloads.mustard.co.nz/releases/`, a public R2 bucket (`mustard-downloads`).
+To publish a release, run `mustard-windows-package.yml` manually with edition `support`
+and **publish** ticked. After signing, the `publish` job waits for approval in the
+`downloads-publish` environment, uploads the signed x64 portable runner as
+`releases/MustardSupport-<date>.<run number>-x86_64.exe`, and checks the public URL.
+Only that file is published; the MSI and ARM64 packages remain run artifacts.
+
+Release names are never reused. A bucket lock (`releases-immutable`, indefinite, on
+`releases/`) refuses overwrites and deletes, so a leaked token can add a file but
+cannot change one that customers download. Publishing does not change what customers
+get: the run summary prints the release URL and SHA-256, and the website switches to
+it through a reviewed change to `ui/web/src/lib/support-download.json` in
+`mustardtech/mustard.co.nz`. The site build checks the file against that SHA-256.
 
 The environment holds `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (an R2 token
 limited to object read and write on that bucket) and the `R2_ACCOUNT_ID` variable.

@@ -14,7 +14,7 @@ on:
         type: string
         required: true
       publish:
-        description: 'Support edition only: replace the customer download on downloads.mustard.co.nz with this run''s signed x64 runner'
+        description: 'Support edition only: publish this run''s signed x64 runner to downloads.mustard.co.nz as a new release'
         type: boolean
         default: false
 
@@ -264,8 +264,10 @@ jobs:
           path: packages/
           if-no-files-found: error
 
-  # The file customers get from the website's "Remote support" button. Manual runs only, and the
-  # downloads-publish environment asks a reviewer to approve before anything is replaced.
+  # A release for the website's "Remote support" button. Manual runs only, and the
+  # downloads-publish environment asks a reviewer to approve first. Every release gets its own
+  # file name under releases/, where a bucket lock refuses overwrites and deletes, so nothing
+  # customers already download can be swapped. The website picks a release by URL and SHA-256.
   publish:
     if: github.event_name == 'workflow_dispatch' && inputs.publish && inputs.edition == 'support'
     needs: sign-installers
@@ -285,7 +287,13 @@ jobs:
         # SHA256SUMS is written on Windows, with CRLF line endings.
         run: tr -d '\r' < SHA256SUMS | grep -F "  $RUNNER_FILE" | sha256sum --check --strict
 
-      - name: Upload the runner to R2
+      - name: Name the release
+        run: |
+          version="$(TZ=Pacific/Auckland date +%Y.%m.%d).$GITHUB_RUN_NUMBER"
+          echo "RELEASE_KEY=releases/MustardSupport-$version-x86_64.exe" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA256=$(sha256sum "packages/$RUNNER_FILE" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Upload the release to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -294,23 +302,29 @@ jobs:
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
         run: |
-          # The file name never changes, so the cache lifetime is how soon customers see a new build.
-          aws s3 cp "packages/$RUNNER_FILE" "s3://$DOWNLOADS_BUCKET/$RUNNER_FILE" \
+          # The name is never reused, so browsers and Cloudflare may keep the file for good.
+          aws s3 cp "packages/$RUNNER_FILE" "s3://$DOWNLOADS_BUCKET/$RELEASE_KEY" \
             --endpoint-url "https://${{ vars.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
             --content-type application/octet-stream \
-            --cache-control 'public, max-age=300'
+            --cache-control 'public, max-age=31536000, immutable'
 
       - name: Check the public download
         run: |
-          expected=$(tr -d '\r' < packages/SHA256SUMS | grep -F "  $RUNNER_FILE" | cut -d' ' -f1)
-          # Up to the cache lifetime, in case an edge is still serving the previous build.
-          for attempt in $(seq 1 12); do
-            actual=$(curl --fail --silent --show-error --location "$DOWNLOADS_URL/$RUNNER_FILE" | sha256sum | cut -d' ' -f1)
-            if [ "$actual" = "$expected" ]; then
-              echo "$DOWNLOADS_URL/$RUNNER_FILE is now $expected"
-              exit 0
-            fi
-            sleep 30
-          done
-          echo "::error::$DOWNLOADS_URL/$RUNNER_FILE is $actual, expected $expected"
-          exit 1
+          actual=$(curl --fail --silent --show-error --location --retry 3 "$DOWNLOADS_URL/$RELEASE_KEY" | sha256sum | cut -d' ' -f1)
+          if [ "$actual" != "$RELEASE_SHA256" ]; then
+            echo "::error::$DOWNLOADS_URL/$RELEASE_KEY is $actual, expected $RELEASE_SHA256"
+            exit 1
+          fi
+          {
+            echo "### Published"
+            echo
+            echo "Customers keep getting the previous release until the website points at this one."
+            echo "In mustardtech/mustard.co.nz, set ui/web/src/lib/support-download.json to:"
+            echo
+            echo '```json'
+            echo "{"
+            echo "  \"url\": \"$DOWNLOADS_URL/$RELEASE_KEY\","
+            echo "  \"sha256\": \"$RELEASE_SHA256\""
+            echo "}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
