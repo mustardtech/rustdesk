@@ -66,9 +66,15 @@ these changes; the normal build still needs the project's existing generated bri
 Windows release packaging must use the edition's name for installer/product metadata
 and the installed executable. The existing MSI tool accepts
 `--app-name MustardSupport --conn-type incoming --manufacturer Mustard` or
-`--app-name MustardRemote --manufacturer Mustard`. Internal build
-outputs may still be named `rustdesk`; the connection settings do not depend on
-the download filename. Signing, installer generation and publication remain the
+`--app-name MustardRemote --manufacturer Mustard`. The compiled bundle
+names its executable `rustdesk.exe`; rename it to `MustardSupport.exe` or
+`MustardRemote.exe` before creating either the portable installer or the MSI,
+and pass that name to `libs/portable/generate.py -e`. The portable installer's
+built-in install copies the bundle unchanged and registers the service, shortcuts
+and uninstaller against the edition's executable name, so a bundle that still
+contains `rustdesk.exe` installs an app that cannot start. `build.py` packs
+`rustdesk.exe` and is not suitable for the portable installer of an edition.
+The connection settings do not depend on the download filename. Signing, installer generation and publication remain the
 responsibility of the release pipeline.
 
 The wrapper selects the host desktop platform automatically; `--platform windows`,
