@@ -169,7 +169,10 @@ jobs:
         run: |
           python -m pip install -r libs/portable/requirements.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python libs/portable/generate.py -f rustdesk -o libs/portable -e rustdesk/rustdesk.exe
+          # The in-app installer copies this bundle as-is and registers the service
+          # and shortcuts against <app name>.exe, so the bundle must carry that name.
+          Move-Item rustdesk/rustdesk.exe "rustdesk/$env:MUSTARD_APP_NAME.exe"
+          python libs/portable/generate.py -f rustdesk -o libs/portable -e "rustdesk/$env:MUSTARD_APP_NAME.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item target/release/rustdesk-portable-packer.exe "packages/$env:MUSTARD_APP_NAME-${{ matrix.arch }}.exe"
 
@@ -178,7 +181,6 @@ jobs:
       - name: Build MSI
         working-directory: res/msi
         run: |
-          Move-Item ../../rustdesk/rustdesk.exe "../../rustdesk/$env:MUSTARD_APP_NAME.exe"
           if ($env:MUSTARD_EDITION -eq 'support') {
             python preprocess.py -d ../../rustdesk --app-name $env:MUSTARD_APP_NAME --manufacturer Mustard --conn-type incoming
           } else {

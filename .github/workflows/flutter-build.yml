@@ -452,9 +452,16 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           sed -i '/dpiAware/d' res/manifest.xml
+          app_exe=rustdesk.exe
+          if [ -n "$MUSTARD_EDITION" ]; then
+            # The in-app installer copies this bundle as-is and registers the service
+            # and shortcuts against <app name>.exe, so the bundle must carry that name.
+            app_exe="$MUSTARD_APP_NAME.exe"
+            mv ./rustdesk/rustdesk.exe "./rustdesk/$app_exe"
+          fi
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/$app_exe"
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe
@@ -476,7 +483,6 @@ jobs:
         run: |
           pushd ./res/msi
           if ($env:MUSTARD_EDITION) {
-            Copy-Item "../../rustdesk/rustdesk.exe" "../../rustdesk/$env:MUSTARD_APP_NAME.exe"
             $connType = if ($env:MUSTARD_EDITION -eq 'support') { 'incoming' } else { '' }
             python preprocess.py --arp -d ../../rustdesk --app-name "$env:MUSTARD_APP_NAME" --manufacturer Mustard --conn-type "$connType"
           } else {
@@ -507,7 +513,7 @@ jobs:
         # Building the arm64 template on the native arm64 runner makes the ARM
         # package available: the build agents are x64 and cannot run
         # preprocess.py against an ARM exe.
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: inputs.mustard-edition == '' && env.UPLOAD_ARTIFACT == 'true'
         run: |
           git checkout -- res/msi
           cp -r ./rustdesk ./rustdesk-msi-template
@@ -531,7 +537,7 @@ jobs:
           rm -r -fo ./rustdesk-msi-template
 
       - name: Upload unsigned msi template
-        if: env.UPLOAD_ARTIFACT == 'true'
+        if: inputs.mustard-edition == '' && env.UPLOAD_ARTIFACT == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rustdesk-unsigned-msi-template-${{ matrix.job.arch }}
